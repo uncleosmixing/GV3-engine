@@ -42,6 +42,7 @@ private:
     void updateHover(int mouseX, int mouseY);
     bool isOverValueText(int mouseX, int mouseY) const;
     bool isOverKnob(int mouseX, int mouseY) const;
+    void handleMeterPeakHoldClick(int mouseX, int mouseY);
     void beginValueEdit();
     void commitValueEdit();
     void cancelValueEdit();

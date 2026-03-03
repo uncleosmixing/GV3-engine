@@ -1,0 +1,6 @@
+[submodule "external/xsimd"]
+	path = external/xsimd
+	url = https://github.com/xtensor-stack/xsimd.git
+[submodule "external/glfw"]
+	path = external/glfw
+	url = https://github.com/glfw/glfw.git

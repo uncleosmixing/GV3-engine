@@ -21,6 +21,7 @@ std::string EqualizerProcessor::name() const
 void EqualizerProcessor::prepare(const ProcessSpec& spec)
 {
     m_spec = spec;
+    initializeParameters();
     m_state.assign(spec.channelCount, FilterState {});
 }
 

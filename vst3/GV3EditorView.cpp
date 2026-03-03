@@ -368,6 +368,13 @@ void GV3EditorView::beginValueEdit()
         return;
     }
 
+    // Apply DARK THEME styling to match UI
+    HBRUSH darkBrush = CreateSolidBrush(RGB(28, 28, 44));  // Match knob color
+    SetClassLongPtrA(m_valueEdit, GCLP_HBRBACKGROUND, reinterpret_cast<LONG_PTR>(darkBrush));
+    
+    // Set text color to white (via WM_CTLCOLOREDIT in parent window proc)
+    // Note: text color needs to be set in parent's WM_CTLCOLOREDIT handler
+
     m_prevValueEditProc = reinterpret_cast<WNDPROC>(SetWindowLongPtrA(
         m_valueEdit, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(&GV3EditorView::valueEditProc)));
     SetWindowLongPtrA(m_valueEdit, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(this));
@@ -509,11 +516,18 @@ LRESULT CALLBACK GV3EditorView::wndProc(HWND hwnd, UINT msg, WPARAM wParam, LPAR
             SetFocus(hwnd);
             const int x = GET_X_LPARAM(lParam);
             const int y = GET_Y_LPARAM(lParam);
+            
+            // Check peak hold click first (has priority)
+            self->handleMeterPeakHoldClick(x, y);
+            
+            // Then check value text edit
             if (self->isOverValueText(x, y))
             {
                 self->beginValueEdit();
                 return 0;
             }
+            
+            // Finally check knob drag
             self->beginDrag(y);
         }
         return 0;
@@ -561,11 +575,56 @@ LRESULT CALLBACK GV3EditorView::wndProc(HWND hwnd, UINT msg, WPARAM wParam, LPAR
         return 0;
     }
 
+    case WM_CTLCOLOREDIT:
+    {
+        // Dark theme for value edit control
+        if (self && self->m_valueEdit && reinterpret_cast<HWND>(lParam) == self->m_valueEdit)
+        {
+            HDC hdc = reinterpret_cast<HDC>(wParam);
+            SetTextColor(hdc, RGB(240, 240, 255));       // Light text (matches gain readout)
+            SetBkColor(hdc, RGB(28, 28, 44));            // Dark background (matches knob)
+            static HBRUSH darkBrush = CreateSolidBrush(RGB(28, 28, 44));
+            return reinterpret_cast<LRESULT>(darkBrush);
+        }
+        break;
+    }
+
     default:
         break;
     }
 
     return DefWindowProcW(hwnd, msg, wParam, lParam);
+}
+
+void GV3EditorView::handleMeterPeakHoldClick(int mouseX, int mouseY)
+{
+    // Check if click is inside any meter's peak hold bounds
+    auto& rt = gv3::plugins::gainRuntimeState();
+    if (!rt.uiState)
+    {
+        return;
+    }
+    
+    float mx = static_cast<float>(mouseX);
+    float my = static_cast<float>(mouseY);
+    
+    // Check all four meters
+    if (rt.uiState->meterInL.isInsidePeakHoldBounds(mx, my))
+    {
+        rt.uiState->meterInL.resetPeakHold();
+    }
+    else if (rt.uiState->meterInR.isInsidePeakHoldBounds(mx, my))
+    {
+        rt.uiState->meterInR.resetPeakHold();
+    }
+    else if (rt.uiState->meterOutL.isInsidePeakHoldBounds(mx, my))
+    {
+        rt.uiState->meterOutL.resetPeakHold();
+    }
+    else if (rt.uiState->meterOutR.isInsidePeakHoldBounds(mx, my))
+    {
+        rt.uiState->meterOutR.resetPeakHold();
+    }
 }
 
 #else

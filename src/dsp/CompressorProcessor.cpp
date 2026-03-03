@@ -23,6 +23,7 @@ std::string CompressorProcessor::name() const
 void CompressorProcessor::prepare(const ProcessSpec& spec)
 {
     m_spec = spec;
+    initializeParameters();
     m_envelope.assign(spec.channelCount, 0.0f);
 }
 

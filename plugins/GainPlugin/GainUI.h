@@ -91,6 +91,8 @@ inline void drawGainUI(NVGcontext* ctx, int width, int height,
     float cy = h * 0.40f;
 
     auto& rt = gainRuntimeState();
+    rt.ensureUIState();  // Ensure MeterWidget instances exist
+    
     float hoverAmount = rt.hoverAmount.load(std::memory_order_relaxed);
 
     float baseKnobR = std::min(w, h) * 0.18f;
@@ -128,40 +130,69 @@ inline void drawGainUI(NVGcontext* ctx, int width, int height,
     nvgStrokeColor(ctx, nvgRGBA(50, 50, 75, 100));
     nvgStroke(ctx);
 
-    // --- Input meters (LEFT side) ---
+    // --- Professional dBFS Meters using MeterWidget (FIXED WIDTH, ALWAYS VISIBLE) ---
+    // FIXED: Make meters wide enough to be useful (40-60px range)
+    float meterWidth = std::clamp(w * 0.08f, 40.0f, 60.0f);  // 40-60px (was 16-32px!)
+    constexpr float meterSpacing = 8.0f;  // Gap between L/R meters
+    float meterHeight = h * 0.60f;        // Taller meters (60% of height)
+    float meterY = cy - meterHeight * 0.40f;
+    
+    // Input meters (LEFT side)
     {
         float inL = rt.inputMeterL.load(std::memory_order_relaxed);
         float inR = rt.inputMeterR.load(std::memory_order_relaxed);
-        float meterH = h * 0.50f;
-        float meterW = 7.0f;
-        float meterX = cx - arcR - 34.0f;
-        float meterY = cy - meterH * 0.45f;
-
-        drawMeterBar(ctx, meterX, meterY, meterW, meterH, inL);
-        drawMeterBar(ctx, meterX + meterW + 2.0f, meterY, meterW, meterH, inR);
-
-        nvgFontSize(ctx, 8.0f);
-        nvgFillColor(ctx, nvgRGBA(100, 100, 130, 200));
+        
+        // Update MeterWidget state
+        rt.uiState->meterInL.update(inL);
+        rt.uiState->meterInR.update(inR);
+        
+        // Calculate positions (LEFT of knob)
+        float groupCenterX = cx - arcR - (meterWidth + meterSpacing * 0.5f) - 12.0f;
+        float meterLX = groupCenterX - (meterWidth + meterSpacing * 0.5f);
+        float meterRX = groupCenterX + meterSpacing * 0.5f;
+        
+        // Draw meters with labels
+        rt.uiState->meterInL.draw(ctx, meterLX, meterY, meterWidth, meterHeight, "L");
+        rt.uiState->meterInR.draw(ctx, meterRX, meterY, meterWidth, meterHeight, "R");
+        
+        // Restore custom font after MeterWidget (it changes to "sans")
+        ensureUIFont(ctx);
+        
+        // "IN" label above meters
+        nvgFontSize(ctx, 9.5f);
+        nvgFontFace(ctx, "sans-bold");
         nvgTextAlign(ctx, NVG_ALIGN_CENTER | NVG_ALIGN_BOTTOM);
-        nvgText(ctx, meterX + meterW + 1.0f, meterY - 3.0f, "IN", nullptr);
+        nvgFillColor(ctx, nvgRGBA(255, 255, 255, 166));  // rgba(255,255,255,0.65)
+        nvgText(ctx, groupCenterX, meterY - 6.0f, "I N", nullptr);
     }
 
-    // --- Output meters (RIGHT side) ---
+    // Output meters (RIGHT side)
     {
         float outL = rt.outputMeterL.load(std::memory_order_relaxed);
         float outR = rt.outputMeterR.load(std::memory_order_relaxed);
-        float meterH = h * 0.50f;
-        float meterW = 7.0f;
-        float meterX = cx + arcR + 18.0f;
-        float meterY = cy - meterH * 0.45f;
-
-        drawMeterBar(ctx, meterX, meterY, meterW, meterH, outL);
-        drawMeterBar(ctx, meterX + meterW + 2.0f, meterY, meterW, meterH, outR);
-
-        nvgFontSize(ctx, 8.0f);
-        nvgFillColor(ctx, nvgRGBA(100, 100, 130, 200));
+        
+        // Update MeterWidget state
+        rt.uiState->meterOutL.update(outL);
+        rt.uiState->meterOutR.update(outR);
+        
+        // Calculate positions (RIGHT of knob)
+        float groupCenterX = cx + arcR + (meterWidth + meterSpacing * 0.5f) + 12.0f;
+        float meterLX = groupCenterX - (meterWidth + meterSpacing * 0.5f);
+        float meterRX = groupCenterX + meterSpacing * 0.5f;
+        
+        // Draw meters with labels
+        rt.uiState->meterOutL.draw(ctx, meterLX, meterY, meterWidth, meterHeight, "L");
+        rt.uiState->meterOutR.draw(ctx, meterRX, meterY, meterWidth, meterHeight, "R");
+        
+        // Restore custom font after MeterWidget (it changes to "sans")
+        ensureUIFont(ctx);
+        
+        // "OUT" label above meters
+        nvgFontSize(ctx, 9.5f);
+        nvgFontFace(ctx, "sans-bold");
         nvgTextAlign(ctx, NVG_ALIGN_CENTER | NVG_ALIGN_BOTTOM);
-        nvgText(ctx, meterX + meterW + 1.0f, meterY - 3.0f, "OUT", nullptr);
+        nvgFillColor(ctx, nvgRGBA(255, 255, 255, 166));  // rgba(255,255,255,0.65)
+        nvgText(ctx, groupCenterX, meterY - 6.0f, "O U T", nullptr);
     }
 
     // Knob shadow
@@ -292,11 +323,19 @@ inline void drawGainUI(NVGcontext* ctx, int width, int height,
     nvgTextAlign(ctx, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
     nvgText(ctx, cx, cy - knobR - 26.0f, "G A I N", nullptr);
 
-    // dB value — large, clearly visible
+    // dB value — large, clearly visible with background
     {
         char buf[32];
         std::snprintf(buf, sizeof(buf), "%+.1f dB", db);
         float dbTextY = cy + knobR + 30.0f;
+
+        // ADDED: Semi-transparent background for gain readout (improves visibility)
+        float textBgWidth = 120.0f;
+        float textBgHeight = 32.0f;
+        nvgBeginPath(ctx);
+        nvgRoundedRect(ctx, cx - textBgWidth * 0.5f, dbTextY - textBgHeight * 0.5f, textBgWidth, textBgHeight, 4.0f);
+        nvgFillColor(ctx, nvgRGBA(0, 0, 0, 80));  // Dark semi-transparent background
+        nvgFill(ctx);
 
         nvgFontSize(ctx, 22.0f);
         nvgFillColor(ctx, nvgRGBA(240, 240, 255, 255));
@@ -340,6 +379,53 @@ inline NanoVGEditorBridge createGainEditorBridge()
     return NanoVGEditorBridge(
         [](void* vg, int w, int h, const NanoVGEditorModel& model) {
             drawGainUI(static_cast<NVGcontext*>(vg), w, h, model);
+        });
+}
+
+// ============================================================================
+// NEW UI2 BRIDGE (modular, responsive architecture)
+// ============================================================================
+
+#include "src/ui2/core/Rect.h"
+#include "src/ui2/core/UiContext.h"
+#include "src/ui2/scenes/GainScene.h"
+
+inline NanoVGEditorBridge createGainEditorBridge_UI2()
+{
+    // Static scene instance (persistent across frames)
+    static gv3::ui2::GainScene scene;
+    
+    return NanoVGEditorBridge(
+        [](void* vg, int w, int h, const NanoVGEditorModel& model) {
+            auto* nvg = static_cast<NVGcontext*>(vg);
+            
+            // Ensure font is loaded
+            ensureUIFont(nvg);
+            
+            // Begin NanoVG frame
+            nvgBeginFrame(nvg, static_cast<float>(w), static_cast<float>(h), 1.0f);
+            
+            // Build UI context
+            gv3::ui2::Rect viewRect{ 0.0f, 0.0f, static_cast<float>(w), static_cast<float>(h) };
+            gv3::ui2::UiContext uiContext;
+            uiContext.viewRect = viewRect;
+            uiContext.uiScale = 1.0f;  // TODO: DPI awareness
+            uiContext.dt = 1.0f / 60.0f;
+            
+            // Update scene layout (adaptive to window size)
+            scene.layout(viewRect, uiContext);
+            
+            // Sync knob value from model
+            if (!model.knobs().empty())
+            {
+                scene.getKnob().setValue(model.knobs()[0].normalizedValue);
+            }
+            
+            // Draw scene
+            scene.draw(nvg, uiContext);
+            
+            // End NanoVG frame
+            nvgEndFrame(nvg);
         });
 }
 

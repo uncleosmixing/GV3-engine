@@ -11,6 +11,9 @@
 #include <unordered_map>
 #include <vector>
 
+#include "src/engine/ParameterRegistry.h"
+#include "src/engine/ParameterState.h"
+
 namespace gv3
 {
     enum class PluginKind
@@ -20,23 +23,28 @@ namespace gv3
         Gain
     };
 
-    struct ParameterDefinition
-    {
-        std::string id;
-        std::string name;
-        float defaultValue { 0.0f };
-        float minValue { 0.0f };
-        float maxValue { 1.0f };
-    };
+    // Note: ParameterDefinition is now defined in ParameterRegistry.h
+    // This typedef maintains backward compatibility
+    using ParameterDefinition = gv3::ParameterDefinition;
 
+    /// ParameterStore — backward-compatible wrapper around ParameterRegistry + ParameterState
+    /// New code should use Registry (metadata) and State (values) directly.
+    /// This class maintains the old API for existing plugins.
     class ParameterStore
     {
     public:
+        // Initialization (UI thread)
         void define(ParameterDefinition definition);
+        
+        // Setup after creation (called by PluginProcessor::prepare)
+        void initialize(std::size_t count);
+
+        // String-based access (legacy, avoid in realtime code)
         bool set(const std::string& id, float value);
         float get(const std::string& id) const;
         const std::vector<ParameterDefinition>& definitions() const noexcept;
 
+        // Index-based access (realtime-safe)
         std::size_t count() const noexcept;
         const ParameterDefinition& definitionAt(std::size_t index) const;
         float getByIndex(std::size_t index) const;
@@ -44,10 +52,13 @@ namespace gv3
         float getNormalized(std::size_t index) const;
         bool setNormalized(std::size_t index, float normalizedValue);
 
+        // Access underlying Registry and State (for advanced use)
+        const ParameterRegistry& registry() const noexcept;
+        const ParameterState& state() const noexcept;
+
     private:
-        std::vector<ParameterDefinition> m_definitions;
-        std::unordered_map<std::string, std::size_t> m_indexById;
-        std::vector<float> m_values;
+        ParameterRegistry m_registry;
+        ParameterState m_state;
     };
 
     struct ProcessSpec
@@ -88,6 +99,9 @@ namespace gv3
         const ParameterStore& parameters() const noexcept;
 
     protected:
+        /// Initialize parameter state (call in prepare() after define())
+        void initializeParameters();
+
         ParameterStore m_parameters;
         ProcessSpec m_spec;
     };

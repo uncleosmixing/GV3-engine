@@ -28,3 +28,15 @@
 - `external/glad`
 
 CMake now points to these folders by default.
+
+## Git Initialization
+
+To initialize the git repository and make the initial commit, run the following commands:
+
+```
+git init
+git add .
+git commit -m "Initial commit: GV3 engine + Gain VST3 plugin"
+git branch -M main
+git remote add origin https://github.com/uncleosmixing/GV3-engine.git
+git push -u origin main

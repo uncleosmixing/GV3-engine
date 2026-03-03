@@ -45,7 +45,8 @@ class GV3GainController final : public gv3::vst3::GV3ControllerBase
 public:
     GV3GainController() : GV3ControllerBase(createGainEngine)
     {
-        setEditorBridge(gv3::plugins::createGainEditorBridge());
+        // USE NEW UI2 (modular, responsive architecture)
+        setEditorBridge(gv3::plugins::createGainEditorBridge_UI2());
 
         setGraphicsCallbacks(
             []() -> void* {

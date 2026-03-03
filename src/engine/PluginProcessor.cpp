@@ -11,4 +11,9 @@ const ParameterStore& PluginProcessor::parameters() const noexcept
 {
     return m_parameters;
 }
+
+void PluginProcessor::initializeParameters()
+{
+    m_parameters.initialize(m_parameters.count());
+}
 } // namespace gv3
